@@ -1,6 +1,4 @@
-
---// VISUAL COLOR FILTER
---// Brightness / Saturation / Contrast / Temperature
+--// VISUAL FILTER
 --// F4 = Mostrar/Ocultar menú
 --// F5 = Activar/Desactivar efecto
 
@@ -12,33 +10,86 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 --==================================================
--- LIMPIAR VERSIONES ANTERIORES
+-- CONFIGURACION
 --==================================================
 
-pcall(function()
-    Lighting:FindFirstChild("CustomVisualFilter"):Destroy()
-end)
-
-pcall(function()
-    playerGui:FindFirstChild("VisualFilterMenu"):Destroy()
-end)
+local Settings = {
+    Brightness = 0,
+    Contrast = 0,
+    Saturation = 0,
+    Temperature = 0,
+    Enabled = true
+}
 
 --==================================================
--- EFECTO
+-- CREAR / ACTUALIZAR EFECTO
 --==================================================
 
-local effect = Instance.new("ColorCorrectionEffect")
-effect.Name = "CustomVisualFilter"
-effect.Brightness = 0
-effect.Contrast = 0
-effect.Saturation = 0
-effect.TintColor = Color3.fromRGB(255, 255, 255)
-effect.Enabled = true
-effect.Parent = Lighting
+local effect
+
+local function updateTemperature()
+    if not effect then return end
+
+    local value = Settings.Temperature
+
+    if value < 0 then
+        local amount = math.abs(value)
+
+        effect.TintColor = Color3.new(
+            1 - (amount * 0.15),
+            1 - (amount * 0.05),
+            1
+        )
+    else
+        effect.TintColor = Color3.new(
+            1,
+            1 - (value * 0.12),
+            1 - (value * 0.22)
+        )
+    end
+end
+
+local function applyEffect()
+
+    if not effect or not effect.Parent then
+        effect = Instance.new("ColorCorrectionEffect")
+        effect.Name = "CustomVisualFilter"
+        effect.Parent = Lighting
+    end
+
+    effect.Brightness = Settings.Brightness
+    effect.Contrast = Settings.Contrast
+    effect.Saturation = Settings.Saturation
+
+    updateTemperature()
+
+    effect.Enabled = Settings.Enabled
+end
+
+local function removeOldEffects()
+
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("ColorCorrectionEffect")
+            and obj.Name == "CustomVisualFilter"
+            and obj ~= effect then
+
+            pcall(function()
+                obj:Destroy()
+            end)
+        end
+    end
+end
+
+-- Crear inicialmente
+applyEffect()
 
 --==================================================
 -- GUI
 --==================================================
+
+pcall(function()
+    playerGui:FindFirstChild("VisualFilterMenu"):Destroy()
+end)
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "VisualFilterMenu"
@@ -89,7 +140,7 @@ subtitle.TextXAlignment = Enum.TextXAlignment.Left
 subtitle.Parent = main
 
 --==================================================
--- SLIDER CREATOR
+-- SLIDERS
 --==================================================
 
 local sliderY = 78
@@ -159,9 +210,12 @@ local function createSlider(name, minValue, maxValue, defaultValue, callback)
     local dragging = false
 
     local function setValue(value)
+
         value = math.clamp(value, minValue, maxValue)
 
-        local percent = (value - minValue) / (maxValue - minValue)
+        local percent =
+            (value - minValue) /
+            (maxValue - minValue)
 
         fill.Size = UDim2.new(percent, 0, 1, 0)
         knob.Position = UDim2.new(percent, 0, 0.5, 0)
@@ -172,58 +226,66 @@ local function createSlider(name, minValue, maxValue, defaultValue, callback)
     end
 
     local function updateFromMouse(x)
+
         local percent = math.clamp(
-            (x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X,
+            (x - bar.AbsolutePosition.X) /
+            bar.AbsoluteSize.X,
             0,
             1
         )
 
-        local value = minValue + ((maxValue - minValue) * percent)
+        local value =
+            minValue +
+            ((maxValue - minValue) * percent)
+
         setValue(value)
     end
 
     bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+        if input.UserInputType ==
+            Enum.UserInputType.MouseButton1 then
+
             dragging = true
             updateFromMouse(input.Position.X)
         end
     end)
 
     UIS.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+
+        if dragging and
+            input.UserInputType ==
+            Enum.UserInputType.MouseMovement then
+
             updateFromMouse(input.Position.X)
         end
     end)
 
     UIS.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+        if input.UserInputType ==
+            Enum.UserInputType.MouseButton1 then
+
             dragging = false
         end
     end)
 
     setValue(defaultValue)
-
-    return setValue
 end
 
 --==================================================
--- CONFIGURACIONES
+-- SLIDERS
 --==================================================
-
-local brightness = 0
-local contrast = 0
-local saturation = 0
-
-local temperature = 0
 
 createSlider(
     "Brightness",
     -1,
     1,
-    0,
+    Settings.Brightness,
     function(value)
-        brightness = value
-        effect.Brightness = value
+
+        Settings.Brightness = value
+        applyEffect()
     end
 )
 
@@ -231,10 +293,11 @@ createSlider(
     "Contrast",
     -1,
     1,
-    0,
+    Settings.Contrast,
     function(value)
-        contrast = value
-        effect.Contrast = value
+
+        Settings.Contrast = value
+        applyEffect()
     end
 )
 
@@ -242,10 +305,11 @@ createSlider(
     "Saturation",
     -1,
     1,
-    0,
+    Settings.Saturation,
     function(value)
-        saturation = value
-        effect.Saturation = value
+
+        Settings.Saturation = value
+        applyEffect()
     end
 )
 
@@ -253,33 +317,16 @@ createSlider(
     "Temperature",
     -1,
     1,
-    0,
+    Settings.Temperature,
     function(value)
-        temperature = value
 
-        -- Frío -> azul
-        -- Cálido -> amarillo/naranja
-
-        if value < 0 then
-            local amount = math.abs(value)
-
-            effect.TintColor = Color3.new(
-                1 - (amount * 0.15),
-                1 - (amount * 0.05),
-                1
-            )
-        else
-            effect.TintColor = Color3.new(
-                1,
-                1 - (value * 0.12),
-                1 - (value * 0.22)
-            )
-        end
+        Settings.Temperature = value
+        applyEffect()
     end
 )
 
 --==================================================
--- BOTON RESET
+-- RESET
 --==================================================
 
 local reset = Instance.new("TextButton")
@@ -298,25 +345,19 @@ resetCorner.CornerRadius = UDim.new(0, 7)
 resetCorner.Parent = reset
 
 reset.MouseButton1Click:Connect(function()
-    effect.Brightness = 0
-    effect.Contrast = 0
-    effect.Saturation = 0
-    effect.TintColor = Color3.fromRGB(255, 255, 255)
 
-    -- Recrear GUI para que los sliders vuelvan a 0
-    gui:Destroy()
+    Settings.Brightness = 0
+    Settings.Contrast = 0
+    Settings.Saturation = 0
+    Settings.Temperature = 0
 
-    task.wait()
+    applyEffect()
 
-    -- Ejecutar nuevamente el script no es necesario;
-    -- los valores visuales ya fueron restaurados.
 end)
 
 --==================================================
--- ESTADO
+-- STATUS
 --==================================================
-
-local enabled = true
 
 local status = Instance.new("TextLabel")
 status.Size = UDim2.fromOffset(140, 35)
@@ -339,23 +380,75 @@ UIS.InputBegan:Connect(function(input, processed)
         return
     end
 
-    -- F4 = ocultar/mostrar menú
+    -- F4 = Menu
     if input.KeyCode == Enum.KeyCode.F4 then
+
         main.Visible = not main.Visible
     end
 
-    -- F5 = activar/desactivar efecto
+    -- F5 = Efecto
     if input.KeyCode == Enum.KeyCode.F5 then
-        enabled = not enabled
-        effect.Enabled = enabled
 
-        if enabled then
+        Settings.Enabled = not Settings.Enabled
+
+        applyEffect()
+
+        if Settings.Enabled then
+
             status.Text = "● EFFECT ON"
-            status.TextColor3 = Color3.fromRGB(100, 220, 130)
+            status.TextColor3 =
+                Color3.fromRGB(100, 220, 130)
+
         else
+
             status.Text = "● EFFECT OFF"
-            status.TextColor3 = Color3.fromRGB(220, 100, 100)
+            status.TextColor3 =
+                Color3.fromRGB(220, 100, 100)
         end
+    end
+end)
+
+--==================================================
+-- RESPAWN / PROTECCION
+--==================================================
+
+player.CharacterAdded:Connect(function()
+
+    -- Esperar a que termine de cargar el personaje
+    task.wait(1)
+
+    applyEffect()
+    removeOldEffects()
+
+    task.wait(1)
+
+    applyEffect()
+end)
+
+-- Si el juego elimina/reemplaza el efecto,
+-- lo volvemos a aplicar.
+Lighting.ChildRemoved:Connect(function(child)
+
+    if child == effect then
+
+        task.defer(function()
+
+            task.wait()
+
+            applyEffect()
+        end)
+    end
+end)
+
+-- Comprobación periódica
+task.spawn(function()
+
+    while task.wait(2) do
+
+        if Settings.Enabled then
+            applyEffect()
+        end
+
     end
 end)
 
